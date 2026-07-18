@@ -1,5 +1,5 @@
 # Nombre del programa final
-EXEC = admin_linux
+EXEC = programa
 
 # Compilador a usar
 CC = gcc
