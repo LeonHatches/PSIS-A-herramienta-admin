@@ -1,0 +1,146 @@
+/*GLOBAL*/
+window {
+    background-color: #FFFFFF;
+    color: #37352F;
+    font-family: 'Inter', 'Roboto', 'Ubuntu', 'Segoe UI', sans-serif;
+}
+
+/*MENU LATERAL*/
+stacksidebar {
+    background-color: #F7F7F5;
+    border-right: 1px solid #E9E9E7;
+}
+
+stacksidebar row {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 4px 8px;
+    color: #505050;
+}
+
+stacksidebar row:hover {
+    background-color: #EFEFED;
+}
+
+stacksidebar row:selected {
+    background-color: #EBEBE9;
+    color: #000000;
+    font-weight: bold;
+}
+
+/*TIPOGRAFÍA*/
+label.titulo {
+    font-size: 26px;
+    font-weight: bold;
+    color: #37352F;
+    margin-bottom: 12px;
+}
+
+label.subtitulo {
+    font-size: 18px;
+    font-weight: bold;
+    color: #37352F;
+    margin-bottom: 8px;
+}
+
+label.texto {
+    font-size: 14px;
+    color: #787774;
+}
+
+textview, vte-terminal {
+    font-family: 'Fira Code', 'Ubuntu Mono', 'Courier New', monospace;
+    font-size: 13px;
+}
+
+/*TARJETAS*/
+box.tarjeta {
+    background-color: #FFFFFF;
+    border: 1px solid #E9E9E7;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.04); /* Sombra suave premium */
+    margin: 10px;
+}
+
+/*BOTONES*/
+button {
+    background-color: #FFFFFF;
+    border: 1px solid #E9E9E7;
+    color: #37352F;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-weight: bold;
+    box-shadow: 0px 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+button:hover {
+    background-color: #F7F7F5;
+}
+
+button.accion {
+    background-color: #2383E2;
+    color: #FFFFFF;
+    border: none;
+}
+
+button.accion:hover {
+    background-color: #1D6CB8;
+}
+
+button.peligro {
+    background-color: #EB5757;
+    color: #FFFFFF;
+    border: none;
+}
+
+button.peligro:hover {
+    background-color: #C94A4A;
+}
+
+/*TABLASA*/
+treeview {
+    background-color: #FFFFFF;
+    color: #37352F;
+    border-radius: 8px;
+    border: 1px solid #E9E9E7;
+}
+
+treeview header button {
+    background-color: #F7F7F5;
+    color: #787774;
+    font-weight: bold;
+    border: none;
+    border-bottom: 1px solid #E9E9E7;
+    padding: 8px;
+}
+
+treeview:selected {
+    background-color: #E8F2FA;
+    color: #2383E2;
+}
+
+/*BARRAS DE PROGRESO Y BUSCADORES*/
+progressbar trough {
+    background-color: #E9E9E7;
+    border-radius: 10px;
+    min-height: 8px;
+}
+
+progressbar progress {
+    background-color: #2383E2;
+    border-radius: 10px;
+}
+
+entry {
+    background-color: #F7F7F5;
+    border: 1px solid #E9E9E7;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #37352F;
+}
+
+entry:focus {
+    border: 1px solid #2383E2;
+    background-color: #FFFFFF;
+}
