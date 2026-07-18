@@ -116,6 +116,11 @@ static void usar_directorio_raiz(GtkWidget *widget, gpointer datos) {
     actualizar_directorio(datos, "/");
 }
 
+static void usar_directorio_personal(GtkWidget *widget, gpointer datos) {
+    (void)widget;
+    actualizar_directorio(datos, g_get_home_dir());
+}
+
 static void liberar_consola(gpointer datos) {
     Consola *consola = datos;
     g_free(consola->directorio);
@@ -168,6 +173,7 @@ GtkWidget *crear_pantalla_consola(void) {
     GtkWidget *barra_directorio = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     GtkWidget *texto_directorio = gtk_label_new("Carpeta de trabajo:");
     GtkWidget *elegir_directorio = gtk_button_new_with_label("Elegir carpeta");
+    GtkWidget *ir_personal = gtk_button_new_with_label("Carpeta personal");
     GtkWidget *ir_raiz = gtk_button_new_with_label("Usar raíz /");
     GtkWidget *limpiar = gtk_button_new_with_label("Limpiar salida");
     GtkWidget *contenido = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -191,7 +197,7 @@ GtkWidget *crear_pantalla_consola(void) {
     gtk_box_pack_start(GTK_BOX(barra), consola->boton_ejecutar, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(barra), limpiar, FALSE, FALSE, 0);
 
-    consola->directorio = g_strdup("/");
+    consola->directorio = g_strdup(g_get_home_dir());
     consola->etiqueta_directorio = gtk_label_new(consola->directorio);
     gtk_label_set_xalign(GTK_LABEL(consola->etiqueta_directorio), 0.0f);
     gtk_label_set_ellipsize(
@@ -200,6 +206,7 @@ GtkWidget *crear_pantalla_consola(void) {
     gtk_box_pack_start(
         GTK_BOX(barra_directorio), consola->etiqueta_directorio, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(barra_directorio), elegir_directorio, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(barra_directorio), ir_personal, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(barra_directorio), ir_raiz, FALSE, FALSE, 0);
 
     GtkWidget *panel_salida = crear_panel_texto("Salida", &consola->salida);
@@ -231,6 +238,8 @@ GtkWidget *crear_pantalla_consola(void) {
     g_signal_connect(limpiar, "clicked", G_CALLBACK(limpiar_resultados), consola);
     g_signal_connect(elegir_directorio, "clicked",
                      G_CALLBACK(seleccionar_directorio), consola);
+    g_signal_connect(ir_personal, "clicked",
+                     G_CALLBACK(usar_directorio_personal), consola);
     g_signal_connect(ir_raiz, "clicked", G_CALLBACK(usar_directorio_raiz), consola);
     g_signal_connect(consola->historial, "row-activated",
                      G_CALLBACK(seleccionar_historial), consola);
