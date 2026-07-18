@@ -3,9 +3,11 @@
 typedef struct {
     GtkWidget *entrada;
     GtkWidget *boton_ejecutar;
+    GtkWidget *etiqueta_directorio;
     GtkTextBuffer *salida;
     GtkTextBuffer *errores;
     GtkWidget *historial;
+    gchar *directorio;
 } Consola;
 
 typedef struct {
@@ -60,9 +62,12 @@ static void ejecutar_comando(GtkWidget *widget, gpointer datos) {
         return;
     }
 
-    GSubprocess *proceso = g_subprocess_new(
-        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE,
-        &error, "/bin/sh", "-c", comando, NULL);
+    GSubprocessLauncher *lanzador = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
+    g_subprocess_launcher_set_cwd(lanzador, consola->directorio);
+    GSubprocess *proceso = g_subprocess_launcher_spawn(
+        lanzador, &error, "/bin/sh", "-c", comando, NULL);
+    g_object_unref(lanzador);
 
     if (proceso == NULL) {
         reemplazar_texto(consola->errores, error->message);
@@ -80,6 +85,41 @@ static void ejecutar_comando(GtkWidget *widget, gpointer datos) {
     ejecucion->proceso = proceso;
     g_subprocess_communicate_utf8_async(
         proceso, NULL, NULL, finalizar_ejecucion, ejecucion);
+}
+
+static void actualizar_directorio(Consola *consola, const gchar *directorio) {
+    g_free(consola->directorio);
+    consola->directorio = g_strdup(directorio);
+    gtk_label_set_text(GTK_LABEL(consola->etiqueta_directorio), directorio);
+}
+
+static void seleccionar_directorio(GtkWidget *widget, gpointer datos) {
+    Consola *consola = datos;
+    GtkWidget *ventana = gtk_widget_get_toplevel(widget);
+    GtkWidget *dialogo = gtk_file_chooser_dialog_new(
+        "Seleccionar carpeta de trabajo", GTK_WINDOW(ventana),
+        GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+        "Cancelar", GTK_RESPONSE_CANCEL,
+        "Seleccionar", GTK_RESPONSE_ACCEPT, NULL);
+
+    gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialogo), consola->directorio);
+    if (gtk_dialog_run(GTK_DIALOG(dialogo)) == GTK_RESPONSE_ACCEPT) {
+        gchar *directorio = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialogo));
+        actualizar_directorio(consola, directorio);
+        g_free(directorio);
+    }
+    gtk_widget_destroy(dialogo);
+}
+
+static void usar_directorio_raiz(GtkWidget *widget, gpointer datos) {
+    (void)widget;
+    actualizar_directorio(datos, "/");
+}
+
+static void liberar_consola(gpointer datos) {
+    Consola *consola = datos;
+    g_free(consola->directorio);
+    g_free(consola);
 }
 
 static void seleccionar_historial(GtkListBox *lista, GtkListBoxRow *fila, gpointer datos) {
@@ -125,6 +165,10 @@ GtkWidget *crear_pantalla_consola(void) {
     GtkWidget *descripcion = gtk_label_new(
         "Ejecute comandos y revise por separado la salida, los errores y el historial.");
     GtkWidget *barra = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *barra_directorio = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *texto_directorio = gtk_label_new("Carpeta de trabajo:");
+    GtkWidget *elegir_directorio = gtk_button_new_with_label("Elegir carpeta");
+    GtkWidget *ir_raiz = gtk_button_new_with_label("Usar raíz /");
     GtkWidget *limpiar = gtk_button_new_with_label("Limpiar salida");
     GtkWidget *contenido = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     GtkWidget *resultados = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
@@ -147,6 +191,17 @@ GtkWidget *crear_pantalla_consola(void) {
     gtk_box_pack_start(GTK_BOX(barra), consola->boton_ejecutar, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(barra), limpiar, FALSE, FALSE, 0);
 
+    consola->directorio = g_strdup("/");
+    consola->etiqueta_directorio = gtk_label_new(consola->directorio);
+    gtk_label_set_xalign(GTK_LABEL(consola->etiqueta_directorio), 0.0f);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(consola->etiqueta_directorio), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(barra_directorio), texto_directorio, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(barra_directorio), consola->etiqueta_directorio, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(barra_directorio), elegir_directorio, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(barra_directorio), ir_raiz, FALSE, FALSE, 0);
+
     GtkWidget *panel_salida = crear_panel_texto("Salida", &consola->salida);
     GtkWidget *panel_errores = crear_panel_texto("Errores", &consola->errores);
     gtk_paned_pack1(GTK_PANED(resultados), panel_salida, TRUE, FALSE);
@@ -167,15 +222,19 @@ GtkWidget *crear_pantalla_consola(void) {
 
     gtk_box_pack_start(GTK_BOX(pagina), titulo, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(pagina), descripcion, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(pagina), barra_directorio, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(pagina), barra, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(pagina), contenido, TRUE, TRUE, 0);
 
     g_signal_connect(consola->boton_ejecutar, "clicked", G_CALLBACK(ejecutar_comando), consola);
     g_signal_connect(consola->entrada, "activate", G_CALLBACK(ejecutar_comando), consola);
     g_signal_connect(limpiar, "clicked", G_CALLBACK(limpiar_resultados), consola);
+    g_signal_connect(elegir_directorio, "clicked",
+                     G_CALLBACK(seleccionar_directorio), consola);
+    g_signal_connect(ir_raiz, "clicked", G_CALLBACK(usar_directorio_raiz), consola);
     g_signal_connect(consola->historial, "row-activated",
                      G_CALLBACK(seleccionar_historial), consola);
-    g_object_set_data_full(G_OBJECT(pagina), "consola-datos", consola, g_free);
+    g_object_set_data_full(G_OBJECT(pagina), "consola-datos", consola, liberar_consola);
 
     return pagina;
 }
