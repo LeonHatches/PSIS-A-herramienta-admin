@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include "bienvenida.h"
+#include "archivos.h"
 
 static void cargar_css() {
     GtkCssProvider *provider = gtk_css_provider_new();
@@ -33,6 +34,8 @@ static void activar(GtkApplication *app, gpointer user_data) {
     gtk_box_pack_start(GTK_BOX(caja_principal), stack, TRUE, TRUE, 0);
 
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_bienvenida(), "bienvenida", "Inicio");
+    
+    gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_archivos(), "archivos", "Archivos");
 
     gtk_widget_show_all(ventana);
 }
