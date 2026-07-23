@@ -146,6 +146,8 @@ static void limpiar_resultados(GtkWidget *widget, gpointer datos) {
 
 static GtkWidget *crear_panel_texto(const gchar *titulo, GtkTextBuffer **buffer) {
     GtkWidget *caja = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_style_context_add_class(gtk_widget_get_style_context(caja), "tarjeta");
+    
     GtkWidget *etiqueta = gtk_label_new(titulo);
     GtkWidget *desplazamiento = gtk_scrolled_window_new(NULL, NULL);
     GtkWidget *vista = gtk_text_view_new();
@@ -178,7 +180,10 @@ GtkWidget *crear_pantalla_consola(void) {
     GtkWidget *limpiar = gtk_button_new_with_label("Limpiar salida");
     GtkWidget *contenido = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     GtkWidget *resultados = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+    
     GtkWidget *panel_historial = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_style_context_add_class(gtk_widget_get_style_context(panel_historial), "tarjeta");
+    
     GtkWidget *titulo_historial = gtk_label_new("Historial");
     GtkWidget *scroll_historial = gtk_scrolled_window_new(NULL, NULL);
 
