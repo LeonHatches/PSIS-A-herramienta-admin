@@ -3,6 +3,7 @@
 #include "consola.h"
 #include "bash.h"
 #include "tareas.h"
+#include "descargas.h"
 
 static void cargar_css() {
     GtkCssProvider *provider = gtk_css_provider_new();
@@ -40,6 +41,7 @@ static void activar(GtkApplication *app, gpointer user_data) {
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_consola(), "consola", "Comandos Linux");
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_bash(), "bash", "Analizador Bash");
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_tareas(), "tareas", "Administrador de Tareas");
+    gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_descargas(), "descargas", "Descargas");
 
     gtk_widget_show_all(ventana);
 }
