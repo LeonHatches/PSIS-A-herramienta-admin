@@ -3,6 +3,8 @@
 #include "archivos.h"
 #include "consola.h"
 #include "bash.h"
+#include "tareas.h"
+#include "descargas.h"
 
 static void cargar_css() {
     GtkCssProvider *provider = gtk_css_provider_new();
@@ -16,8 +18,9 @@ static void cargar_css() {
 }
 
 static void activar(GtkApplication *app, gpointer user_data) {
+    g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", FALSE, NULL);
     GtkWidget *ventana = gtk_application_window_new(app);
-    gtk_window_set_title(GTK_WINDOW(ventana), "ADMIN Linux");
+    gtk_window_set_title(GTK_WINDOW(ventana), "Herramienta de Administrador");
     gtk_window_set_default_size(GTK_WINDOW(ventana), 1000, 600);
 
     cargar_css();
@@ -39,11 +42,14 @@ static void activar(GtkApplication *app, gpointer user_data) {
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_archivos(), "archivos", "Archivos");
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_consola(), "consola", "Comandos Linux");
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_bash(), "bash", "Analizador Bash");
+    gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_tareas(), "tareas", "Administrador de Tareas");
+    gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_descargas(), "descargas", "Descargas");
 
     gtk_widget_show_all(ventana);
 }
 
 int main(int argc, char **argv) {
+    setenv("GTK_THEME", "Adwaita", 1);
     GtkApplication *app = gtk_application_new("com.unsa.admin", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(activar), NULL);
     int estado = g_application_run(G_APPLICATION(app), argc, argv);
