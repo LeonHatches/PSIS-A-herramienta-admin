@@ -79,23 +79,33 @@ button:hover {
 }
 
 button.accion {
-    background-color: #2383E2;
-    color: #FFFFFF;
+    background-image: none;
+    background-color: #0d6efd;
+    color: white;
+    font-weight: bold;
+    border-radius: 5px;
     border: none;
+    padding: 5px 15px;
 }
 
 button.accion:hover {
-    background-color: #1D6CB8;
+    background-image: none;
+    background-color: #0b5ed7;
 }
 
 button.peligro {
-    background-color: #EB5757;
-    color: #FFFFFF;
+    background-image: none;
+    background-color: #dc3545;
+    color: white;
+    font-weight: bold;
+    border-radius: 5px;
     border: none;
+    padding: 5px 15px;
 }
 
 button.peligro:hover {
-    background-color: #C94A4A;
+    background-image: none;
+    background-color: #bb2d3b;
 }
 
 /*TABLASA*/
