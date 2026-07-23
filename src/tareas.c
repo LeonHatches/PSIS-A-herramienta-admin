@@ -4,15 +4,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h> // Necesario para sysconf()
 
 enum {
     COLUMNA_PID = 0,
     COLUMNA_NOMBRE,
+    COLUMNA_CPU,
+    COLUMNA_MEMORIA,
     NUM_COLUMNAS
 };
 
 // ==========================================
-// MÓDULO: Listar procesos
+// MÓDULO: Listar procesos, CPU y Memoria
 // ==========================================
 static void listar_procesos(GtkListStore *modelo, const char *filtro) {
     struct dirent *entrada;
@@ -22,15 +25,21 @@ static void listar_procesos(GtkListStore *modelo, const char *filtro) {
 
     gtk_list_store_clear(modelo);
 
+    // Obtenemos los valores del sistema una sola vez
+    long tamano_pagina = sysconf(_SC_PAGESIZE);
+    long ticks_reloj = sysconf(_SC_CLK_TCK);
+
     while ((entrada = readdir(directorio)) != NULL) {
         if (isdigit(entrada->d_name[0])) {
             char ruta[512];
             char nombre[256] = "Desconocido";
+            char str_cpu[64] = "0 s";
+            char str_mem[64] = "0 KB";
             FILE *archivo;
 
+            // 1. Leer Nombre
             snprintf(ruta, sizeof(ruta), "/proc/%s/comm", entrada->d_name);
             archivo = fopen(ruta, "r");
-            
             if (archivo != NULL) {
                 if (fgets(nombre, sizeof(nombre), archivo) != NULL) {
                     nombre[strcspn(nombre, "\n")] = 0; 
@@ -45,11 +54,43 @@ static void listar_procesos(GtkListStore *modelo, const char *filtro) {
                 }
             }
 
+            // 2. Leer Memoria
+            snprintf(ruta, sizeof(ruta), "/proc/%s/statm", entrada->d_name);
+            archivo = fopen(ruta, "r");
+            if (archivo != NULL) {
+                long paginas_total, paginas_rss;
+                if (fscanf(archivo, "%ld %ld", &paginas_total, &paginas_rss) == 2) {
+                    // Convertimos a MB usando float para tener decimales
+                    float memoria_mb = (float)(paginas_rss * tamano_pagina) / (1024.0 * 1024.0);
+                    snprintf(str_mem, sizeof(str_mem), "%.2f MB", memoria_mb);
+                }
+                fclose(archivo);
+            }
+
+            // 3. Leer CPU (Tiempo total en el archivo stat)
+            snprintf(ruta, sizeof(ruta), "/proc/%s/stat", entrada->d_name);
+            archivo = fopen(ruta, "r");
+            if (archivo != NULL) {
+                char linea[1024];
+                if (fgets(linea, sizeof(linea), archivo) != NULL) {
+                    char *cierre_parentesis = strrchr(linea, ')'); // Saltamos el nombre
+                    if (cierre_parentesis != NULL) {
+                        unsigned long utime = 0, stime = 0;
+                        sscanf(cierre_parentesis + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &utime, &stime);
+                        snprintf(str_cpu, sizeof(str_cpu), "%lu s", (utime + stime) / ticks_reloj);
+                    }
+                }
+                fclose(archivo);
+            }
+
+            // Insertar fila en la tabla
             GtkTreeIter iterador;
             gtk_list_store_append(modelo, &iterador);
             gtk_list_store_set(modelo, &iterador,
                                COLUMNA_PID, entrada->d_name,
                                COLUMNA_NOMBRE, nombre,
+                               COLUMNA_CPU, str_cpu,
+                               COLUMNA_MEMORIA, str_mem,
                                -1);
         }
     }
@@ -62,7 +103,6 @@ static void listar_procesos(GtkListStore *modelo, const char *filtro) {
 static void buscar_por_nombre(GtkEntry *buscador, gpointer user_data) {
     GtkListStore *modelo = GTK_LIST_STORE(user_data);
     const char *texto = gtk_entry_get_text(buscador);
-    
     listar_procesos(modelo, texto);
 }
 
@@ -77,8 +117,16 @@ static void configurar_columnas(GtkTreeView *arbol) {
     gtk_tree_view_append_column(arbol, col_pid);
 
     GtkTreeViewColumn *col_nombre = gtk_tree_view_column_new_with_attributes(
-        "Nombre del Proceso", renderizador, "text", COLUMNA_NOMBRE, NULL);
+        "Nombre", renderizador, "text", COLUMNA_NOMBRE, NULL);
     gtk_tree_view_append_column(arbol, col_nombre);
+
+    GtkTreeViewColumn *col_cpu = gtk_tree_view_column_new_with_attributes(
+        "Tiempo CPU", renderizador, "text", COLUMNA_CPU, NULL);
+    gtk_tree_view_append_column(arbol, col_cpu);
+
+    GtkTreeViewColumn *col_mem = gtk_tree_view_column_new_with_attributes(
+        "Memoria (RSS)", renderizador, "text", COLUMNA_MEMORIA, NULL);
+    gtk_tree_view_append_column(arbol, col_mem);
 }
 
 // ==========================================
@@ -93,9 +141,8 @@ GtkWidget* crear_pantalla_tareas() {
     gtk_widget_set_halign(titulo, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(caja), titulo, FALSE, FALSE, 0);
 
-    GtkListStore *modelo = gtk_list_store_new(NUM_COLUMNAS, G_TYPE_STRING, G_TYPE_STRING);
+    GtkListStore *modelo = gtk_list_store_new(NUM_COLUMNAS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
 
-    // Caja de búsqueda (Input)
     GtkWidget *buscador = gtk_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(buscador), "Buscar por nombre o PID...");
     g_signal_connect(buscador, "changed", G_CALLBACK(buscar_por_nombre), modelo);
@@ -105,7 +152,7 @@ GtkWidget* crear_pantalla_tareas() {
     g_object_unref(modelo); 
 
     configurar_columnas(GTK_TREE_VIEW(arbol));
-    listar_procesos(modelo, NULL);
+    listar_procesos(modelo, NULL); 
 
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_vexpand(scroll, TRUE);
