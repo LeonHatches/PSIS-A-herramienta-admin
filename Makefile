@@ -20,3 +20,7 @@ all:
 # Regla para limpiar
 clean:
 	rm -f $(EXEC)
+
+# Ejecutar
+run:
+	./programa

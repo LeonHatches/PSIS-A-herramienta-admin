@@ -15,8 +15,9 @@ static void cargar_css() {
 }
 
 static void activar(GtkApplication *app, gpointer user_data) {
+    g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", FALSE, NULL);
     GtkWidget *ventana = gtk_application_window_new(app);
-    gtk_window_set_title(GTK_WINDOW(ventana), "ADMIN Linux");
+    gtk_window_set_title(GTK_WINDOW(ventana), "Herramienta de Administrador");
     gtk_window_set_default_size(GTK_WINDOW(ventana), 1000, 600);
 
     cargar_css();
@@ -42,6 +43,7 @@ static void activar(GtkApplication *app, gpointer user_data) {
 }
 
 int main(int argc, char **argv) {
+    setenv("GTK_THEME", "Adwaita", 1);
     GtkApplication *app = gtk_application_new("com.unsa.admin", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(activar), NULL);
     int estado = g_application_run(G_APPLICATION(app), argc, argv);
