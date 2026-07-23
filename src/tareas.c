@@ -291,6 +291,20 @@ static void configurar_columnas(GtkTreeView *arbol) {
 }
 
 // ==========================================
+// MÓDULO: Temporizador Automático
+// ==========================================
+static gboolean actualizar_barra_automatica(gpointer user_data) {
+    GtkTreeStore *modelo = GTK_TREE_STORE(user_data);
+    GtkWidget *barra = g_object_get_data(G_OBJECT(modelo), "barra");
+    
+    if (barra != NULL) {
+        actualizar_estado_sistema(GTK_PROGRESS_BAR(barra));
+    }
+    
+    return G_SOURCE_CONTINUE; 
+}
+
+// ==========================================
 // ENSAMBLAJE PRINCIPAL
 // ==========================================
 GtkWidget* crear_pantalla_tareas() {
@@ -337,6 +351,8 @@ GtkWidget* crear_pantalla_tareas() {
     // Carga inicial
     actualizar_estado_sistema(GTK_PROGRESS_BAR(barra));
     listar_procesos(modelo, NULL, FALSE); 
+
+    g_timeout_add(2000, actualizar_barra_automatica, modelo);
 
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_vexpand(scroll, TRUE);
