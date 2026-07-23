@@ -15,80 +15,163 @@ enum {
     NUM_COLUMNAS
 };
 
+typedef struct {
+    int pid;
+    int ppid;
+    char nombre[256];
+    char cpu[64];
+    char mem[64];
+    int agregado_al_arbol;
+} Proceso;
+
 // ==========================================
-// MÓDULO: Listar procesos, CPU y Memoria
+// MÓDULO: Árbol de procesos (Recursividad)
 // ==========================================
-static void listar_procesos(GtkListStore *modelo, const char *filtro) {
+static void construir_arbol_recursivo(GtkTreeStore *modelo, GtkTreeIter *padre, int ppid_buscado, Proceso *procesos, int total) {
+    for (int i = 0; i < total; i++) {
+        if (procesos[i].ppid == ppid_buscado && !procesos[i].agregado_al_arbol) {
+            procesos[i].agregado_al_arbol = 1; 
+            
+            GtkTreeIter iter;
+            gtk_tree_store_append(modelo, &iter, padre);
+            
+            char pid_str[16];
+            snprintf(pid_str, sizeof(pid_str), "%d", procesos[i].pid);
+            
+            gtk_tree_store_set(modelo, &iter,
+                               COLUMNA_PID, pid_str,
+                               COLUMNA_NOMBRE, procesos[i].nombre,
+                               COLUMNA_CPU, procesos[i].cpu,
+                               COLUMNA_MEMORIA, procesos[i].mem,
+                               -1);
+            
+            construir_arbol_recursivo(modelo, &iter, procesos[i].pid, procesos, total);
+        }
+    }
+}
+
+// ==========================================
+// MÓDULO: Listar y Procesar Sistema
+// ==========================================
+// Ahora recibe un "booleano" para saber si debe dibujar el árbol o la lista plana
+static void listar_procesos(GtkTreeStore *modelo, const char *filtro, gboolean modo_arbol) {
     struct dirent *entrada;
     DIR *directorio = opendir("/proc");
 
     if (directorio == NULL) return;
 
-    gtk_list_store_clear(modelo);
+    gtk_tree_store_clear(modelo);
 
     long tamano_pagina = sysconf(_SC_PAGESIZE);
     long ticks_reloj = sysconf(_SC_CLK_TCK);
 
-    while ((entrada = readdir(directorio)) != NULL) {
+    Proceso *procesos = calloc(8192, sizeof(Proceso));
+    if (!procesos) return;
+    int total_procesos = 0;
+
+    while ((entrada = readdir(directorio)) != NULL && total_procesos < 8192) {
         if (isdigit(entrada->d_name[0])) {
+            Proceso p;
+            p.pid = atoi(entrada->d_name);
+            p.agregado_al_arbol = 0;
+            strcpy(p.nombre, "Desconocido");
+            strcpy(p.cpu, "0 s");
+            strcpy(p.mem, "0.00 MB");
+
             char ruta[512];
-            char nombre[256] = "Desconocido";
-            char str_cpu[64] = "0 s";
-            char str_mem[64] = "0 MB";
             FILE *archivo;
 
-            snprintf(ruta, sizeof(ruta), "/proc/%s/comm", entrada->d_name);
+            snprintf(ruta, sizeof(ruta), "/proc/%d/comm", p.pid);
             archivo = fopen(ruta, "r");
             if (archivo != NULL) {
-                if (fgets(nombre, sizeof(nombre), archivo) != NULL) {
-                    nombre[strcspn(nombre, "\n")] = 0; 
+                if (fgets(p.nombre, sizeof(p.nombre), archivo) != NULL) {
+                    p.nombre[strcspn(p.nombre, "\n")] = 0; 
                 }
                 fclose(archivo);
             }
 
             if (filtro != NULL && strlen(filtro) > 0) {
-                if (strstr(nombre, filtro) == NULL && strstr(entrada->d_name, filtro) == NULL) {
+                char pid_str[16];
+                snprintf(pid_str, sizeof(pid_str), "%d", p.pid);
+                if (strstr(p.nombre, filtro) == NULL && strstr(pid_str, filtro) == NULL) {
                     continue; 
                 }
             }
 
-            snprintf(ruta, sizeof(ruta), "/proc/%s/statm", entrada->d_name);
+            snprintf(ruta, sizeof(ruta), "/proc/%d/statm", p.pid);
             archivo = fopen(ruta, "r");
             if (archivo != NULL) {
                 long paginas_total, paginas_rss;
                 if (fscanf(archivo, "%ld %ld", &paginas_total, &paginas_rss) == 2) {
                     float memoria_mb = (float)(paginas_rss * tamano_pagina) / (1024.0 * 1024.0);
-                    snprintf(str_mem, sizeof(str_mem), "%.2f MB", memoria_mb);
+                    snprintf(p.mem, sizeof(p.mem), "%.2f MB", memoria_mb);
                 }
                 fclose(archivo);
             }
 
-            snprintf(ruta, sizeof(ruta), "/proc/%s/stat", entrada->d_name);
+            p.ppid = 0;
+            snprintf(ruta, sizeof(ruta), "/proc/%d/stat", p.pid);
             archivo = fopen(ruta, "r");
             if (archivo != NULL) {
                 char linea[1024];
                 if (fgets(linea, sizeof(linea), archivo) != NULL) {
-                    char *cierre_parentesis = strrchr(linea, ')'); 
-                    if (cierre_parentesis != NULL) {
+                    char *cierre = strrchr(linea, ')'); 
+                    if (cierre != NULL) {
                         unsigned long utime = 0, stime = 0;
-                        sscanf(cierre_parentesis + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &utime, &stime);
-                        snprintf(str_cpu, sizeof(str_cpu), "%lu s", (utime + stime) / ticks_reloj);
+                        sscanf(cierre + 2, "%*c %d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &p.ppid, &utime, &stime);
+                        snprintf(p.cpu, sizeof(p.cpu), "%lu s", (utime + stime) / ticks_reloj);
                     }
                 }
                 fclose(archivo);
             }
 
-            GtkTreeIter iterador;
-            gtk_list_store_append(modelo, &iterador);
-            gtk_list_store_set(modelo, &iterador,
-                               COLUMNA_PID, entrada->d_name,
-                               COLUMNA_NOMBRE, nombre,
-                               COLUMNA_CPU, str_cpu,
-                               COLUMNA_MEMORIA, str_mem,
-                               -1);
+            procesos[total_procesos++] = p;
         }
     }
     closedir(directorio);
+
+    // DIBUJO INTELIGENTE: Si el botón de árbol está activo Y no hay texto en el buscador, hacemos árbol
+    gboolean usar_arbol = modo_arbol && (filtro == NULL || strlen(filtro) == 0);
+
+    if (!usar_arbol) {
+        // MODO LISTA PLANA
+        for (int i = 0; i < total_procesos; i++) {
+            GtkTreeIter iter;
+            gtk_tree_store_append(modelo, &iter, NULL); 
+            char pid_str[16];
+            snprintf(pid_str, sizeof(pid_str), "%d", procesos[i].pid);
+            gtk_tree_store_set(modelo, &iter,
+                               COLUMNA_PID, pid_str, COLUMNA_NOMBRE, procesos[i].nombre,
+                               COLUMNA_CPU, procesos[i].cpu, COLUMNA_MEMORIA, procesos[i].mem, -1);
+        }
+    } else {
+        // MODO ÁRBOL
+        construir_arbol_recursivo(modelo, NULL, 0, procesos, total_procesos);
+        for (int i = 0; i < total_procesos; i++) {
+            if (!procesos[i].agregado_al_arbol) {
+                construir_arbol_recursivo(modelo, NULL, procesos[i].ppid, procesos, total_procesos);
+            }
+        }
+    }
+
+    free(procesos); 
+}
+
+// ==========================================
+// MÓDULO: Actualizar Vista Unificada
+// ==========================================
+// Esta función lee el estado del buscador y del botón al mismo tiempo
+static void actualizar_vista(GtkWidget *widget, gpointer user_data) {
+    GtkTreeStore *modelo = GTK_TREE_STORE(user_data);
+    
+    // Recuperamos los widgets que guardamos en la memoria del modelo
+    GtkWidget *buscador = g_object_get_data(G_OBJECT(modelo), "buscador");
+    GtkWidget *btn_arbol = g_object_get_data(G_OBJECT(modelo), "btn_arbol");
+
+    const char *texto = gtk_entry_get_text(GTK_ENTRY(buscador));
+    gboolean modo_arbol = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(btn_arbol));
+
+    listar_procesos(modelo, texto, modo_arbol);
 }
 
 // ==========================================
@@ -100,14 +183,12 @@ static void ejecutar_accion_proceso(GtkWidget *item, gpointer user_data) {
     GtkTreeModel *modelo;
     GtkTreeIter iterador;
 
-    // Si hay una fila seleccionada, extraemos su PID
     if (gtk_tree_selection_get_selected(seleccion, &modelo, &iterador)) {
         gchar *pid_str;
         gtk_tree_model_get(modelo, &iterador, COLUMNA_PID, &pid_str, -1);
         int pid = atoi(pid_str);
         g_free(pid_str);
 
-        // Identificamos qué botón del menú se presionó
         const char *accion = g_object_get_data(G_OBJECT(item), "accion");
 
         if (strcmp(accion, "matar") == 0) {
@@ -118,8 +199,8 @@ static void ejecutar_accion_proceso(GtkWidget *item, gpointer user_data) {
             kill(pid, SIGCONT);
         }
 
-        // Refrescamos la tabla para ver los cambios
-        listar_procesos(GTK_LIST_STORE(modelo), NULL);
+        // Refrescar usando la función unificada
+        actualizar_vista(NULL, modelo);
     }
 }
 
@@ -128,15 +209,12 @@ static void ejecutar_accion_proceso(GtkWidget *item, gpointer user_data) {
 // ==========================================
 static gboolean mostrar_menu_contextual(GtkWidget *arbol, GdkEventButton *evento, gpointer user_data) {
     if (evento->type == GDK_BUTTON_PRESS && evento->button == 3) {
-        
-        // Seleccionar automáticamente la fila sobre la que se hizo clic
         GtkTreePath *ruta;
         if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(arbol), evento->x, evento->y, &ruta, NULL, NULL, NULL)) {
             gtk_tree_view_set_cursor(GTK_TREE_VIEW(arbol), ruta, NULL, FALSE);
             gtk_tree_path_free(ruta);
         }
 
-        // Crear el menú emergente
         GtkWidget *menu = gtk_menu_new();
 
         GtkWidget *item_matar = gtk_menu_item_new_with_label("Finalizar Proceso");
@@ -160,15 +238,6 @@ static gboolean mostrar_menu_contextual(GtkWidget *arbol, GdkEventButton *evento
         return TRUE;
     }
     return FALSE;
-}
-
-// ==========================================
-// MÓDULO: Buscar por nombre
-// ==========================================
-static void buscar_por_nombre(GtkEntry *buscador, gpointer user_data) {
-    GtkListStore *modelo = GTK_LIST_STORE(user_data);
-    const char *texto = gtk_entry_get_text(buscador);
-    listar_procesos(modelo, texto);
 }
 
 // ==========================================
@@ -206,21 +275,37 @@ GtkWidget* crear_pantalla_tareas() {
     gtk_widget_set_halign(titulo, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(caja), titulo, FALSE, FALSE, 0);
 
-    GtkListStore *modelo = gtk_list_store_new(NUM_COLUMNAS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    GtkTreeStore *modelo = gtk_tree_store_new(NUM_COLUMNAS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
 
+    // Caja horizontal para poner el buscador y el botón juntos
+    GtkWidget *caja_controles = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    
     GtkWidget *buscador = gtk_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(buscador), "Buscar por nombre o PID...");
-    g_signal_connect(buscador, "changed", G_CALLBACK(buscar_por_nombre), modelo);
-    gtk_box_pack_start(GTK_BOX(caja), buscador, FALSE, FALSE, 0);
+    
+    GtkWidget *btn_arbol = gtk_toggle_button_new_with_label("Ver como Árbol");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn_arbol), FALSE); // Inicia en modo plano
+
+    // Guardamos los controles "dentro" del modelo para que la función actualizar_vista pueda leerlos
+    g_object_set_data(G_OBJECT(modelo), "buscador", buscador);
+    g_object_set_data(G_OBJECT(modelo), "btn_arbol", btn_arbol);
+
+    // Conectamos ambos a la misma función unificada
+    g_signal_connect(buscador, "changed", G_CALLBACK(actualizar_vista), modelo);
+    g_signal_connect(btn_arbol, "toggled", G_CALLBACK(actualizar_vista), modelo);
+
+    // Empaquetamos
+    gtk_box_pack_start(GTK_BOX(caja_controles), buscador, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(caja_controles), btn_arbol, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(caja), caja_controles, FALSE, FALSE, 0);
 
     GtkWidget *arbol = gtk_tree_view_new_with_model(GTK_TREE_MODEL(modelo));
     g_object_unref(modelo); 
 
-    // Conectar el evento de clic derecho al árbol
     g_signal_connect(arbol, "button-press-event", G_CALLBACK(mostrar_menu_contextual), NULL);
 
     configurar_columnas(GTK_TREE_VIEW(arbol));
-    listar_procesos(modelo, NULL); 
+    listar_procesos(modelo, NULL, FALSE); // Carga inicial plana
 
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_vexpand(scroll, TRUE);
