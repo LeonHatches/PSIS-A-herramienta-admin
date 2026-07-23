@@ -10,9 +10,19 @@
  * 'tar --listed-incremental'. Devuelve 0 en éxito, -1 en error. */
 int crear_respaldo_incremental(const char *directorio_origen);
 
-/* Restaura un respaldo puntual dentro de "respaldos/restaurado".
- * Devuelve 0 en éxito, -1 en error. */
-int restaurar_version(const char *archivo_respaldo);
+/* Restaura 'archivo_respaldo' dentro de 'ruta_destino'.
+ *
+ * ADVERTENCIA: antes de extraer, esta función VACÍA por completo el
+ * contenido de 'ruta_destino' (para no mezclar archivos viejos con la
+ * versión restaurada). La confirmación de esa acción destructiva es
+ * responsabilidad de quien llama a esta función (la interfaz), NO de esta
+ * capa de lógica.
+ *
+ * Devuelve 0 en éxito. Devuelve -1 sin extraer nada si: el respaldo no
+ * existe, 'ruta_destino' es una ruta insegura (vacía, "/", o una carpeta
+ * crítica del sistema), o si la limpieza previa falla a medias (por
+ * ejemplo, por falta de permisos sobre algún archivo). */
+int restaurar_version(const char *archivo_respaldo, const char *ruta_destino);
 
 /* Llena 'lista' (arreglo de 'max_elementos' cadenas de 256 bytes) con las
  * rutas de los respaldos disponibles, ordenados por nombre (cronológico,

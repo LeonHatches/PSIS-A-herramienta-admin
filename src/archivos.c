@@ -23,11 +23,41 @@ typedef struct {
     GtkListStore *modelo;
     GtkTreeModel *modelo_filtrado;
     GtkWidget    *label_stats;
+    GtkWidget    *btn_atras;
+    GtkWidget    *btn_adelante;
+    GList        *historial_atras;    /* pila de rutas visitadas (char* con g_strdup) */
+    GList        *historial_adelante; /* pila de rutas "deshechas" por el botón Atrás */
     char          ruta_actual[PATH_MAX];
 } ContextoArchivos;
 
 static void contexto_archivos_destruir(gpointer datos) {
-    g_free(datos);
+    ContextoArchivos *ctx = (ContextoArchivos *) datos;
+    g_list_free_full(ctx->historial_atras, g_free);
+    g_list_free_full(ctx->historial_adelante, g_free);
+    g_free(ctx);
+}
+
+/* ---------- Pila simple de rutas (usada por el historial de navegación) ---------- */
+
+static void pila_push(GList **pila, const char *ruta) {
+    *pila = g_list_prepend(*pila, g_strdup(ruta));
+}
+
+/* Extrae el elemento superior de la pila. El llamador es dueño de la cadena
+ * devuelta y debe liberarla con g_free() cuando termine de usarla. */
+static char* pila_pop(GList **pila) {
+    if (*pila == NULL) return NULL;
+
+    GList *primero = *pila;
+    char *valor = (char *) primero->data;
+    *pila = g_list_remove_link(*pila, primero);
+    g_list_free_1(primero);
+    return valor;
+}
+
+static void pila_vaciar(GList **pila) {
+    g_list_free_full(*pila, g_free);
+    *pila = NULL;
 }
 
 /* ---------- Helpers internos ---------- */
@@ -61,11 +91,58 @@ static void refrescar_tabla(ContextoArchivos *ctx) {
     gtk_entry_set_text(GTK_ENTRY(ctx->entrada_ruta), ctx->ruta_actual);
 }
 
-/* Cambia la carpeta activa y refresca la tabla */
-static void navegar_a(ContextoArchivos *ctx, const char *ruta_nueva) {
+/* Habilita/deshabilita los botones Atrás/Adelante según haya o no historial */
+static void actualizar_sensibilidad_navegacion(ContextoArchivos *ctx) {
+    gtk_widget_set_sensitive(ctx->btn_atras, ctx->historial_atras != NULL);
+    gtk_widget_set_sensitive(ctx->btn_adelante, ctx->historial_adelante != NULL);
+}
+
+/* Cambia la carpeta activa SIN tocar el historial. La usan internamente
+ * navegar_a() y los botones Atrás/Adelante, que ya administran el historial
+ * por su cuenta antes de llamar a esta función. */
+static void ir_a_ruta(ContextoArchivos *ctx, const char *ruta_nueva) {
     strncpy(ctx->ruta_actual, ruta_nueva, sizeof(ctx->ruta_actual) - 1);
     ctx->ruta_actual[sizeof(ctx->ruta_actual) - 1] = '\0';
     refrescar_tabla(ctx);
+    actualizar_sensibilidad_navegacion(ctx);
+}
+
+/* Navegación "normal" (doble clic en una carpeta, o escribir una ruta y
+ * presionar Enter): guarda la carpeta actual en el historial de "atrás" y
+ * limpia el de "adelante", ya que una navegación nueva invalida el redo. */
+static void navegar_a(ContextoArchivos *ctx, const char *ruta_nueva) {
+    if (strcmp(ruta_nueva, ctx->ruta_actual) == 0) {
+        return; /* ya estamos ahí, no hace falta tocar el historial */
+    }
+
+    pila_push(&ctx->historial_atras, ctx->ruta_actual);
+    pila_vaciar(&ctx->historial_adelante);
+
+    ir_a_ruta(ctx, ruta_nueva);
+}
+
+static void on_btn_atras_clicked(GtkWidget *widget, gpointer datos) {
+    (void) widget;
+    ContextoArchivos *ctx = (ContextoArchivos *) datos;
+
+    char *ruta_anterior = pila_pop(&ctx->historial_atras);
+    if (!ruta_anterior) return;
+
+    pila_push(&ctx->historial_adelante, ctx->ruta_actual);
+    ir_a_ruta(ctx, ruta_anterior);
+    g_free(ruta_anterior);
+}
+
+static void on_btn_adelante_clicked(GtkWidget *widget, gpointer datos) {
+    (void) widget;
+    ContextoArchivos *ctx = (ContextoArchivos *) datos;
+
+    char *ruta_siguiente = pila_pop(&ctx->historial_adelante);
+    if (!ruta_siguiente) return;
+
+    pila_push(&ctx->historial_atras, ctx->ruta_actual);
+    ir_a_ruta(ctx, ruta_siguiente);
+    g_free(ruta_siguiente);
 }
 
 /* Obtiene ruta completa y tipo de la fila seleccionada en la tabla.
@@ -259,6 +336,17 @@ static void on_btn_eliminar_clicked(GtkWidget *widget, gpointer datos) {
 static void on_btn_respaldos_clicked(GtkWidget *widget, gpointer datos) {
     ContextoArchivos *ctx = (ContextoArchivos *) datos;
 
+    /* Si hay algo seleccionado en la tabla, se respalda justo ESO (archivo o
+     * carpeta). Si no hay selección, se respalda la carpeta que se está
+     * viendo actualmente (comportamiento anterior, como respaldo general). */
+    char ruta_objetivo[PATH_MAX];
+    char tipo_objetivo[32];
+
+    if (!obtener_seleccion(ctx, ruta_objetivo, sizeof(ruta_objetivo), tipo_objetivo, sizeof(tipo_objetivo))) {
+        snprintf(ruta_objetivo, sizeof(ruta_objetivo), "%s", ctx->ruta_actual);
+        snprintf(tipo_objetivo, sizeof(tipo_objetivo), "Carpeta actual");
+    }
+
     GtkWidget *dialogo = gtk_dialog_new_with_buttons(
         "Gestión de Respaldos",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
@@ -273,8 +361,8 @@ static void on_btn_respaldos_clicked(GtkWidget *widget, gpointer datos) {
 
     char mensaje[PATH_MAX + 128];
     snprintf(mensaje, sizeof(mensaje),
-             "\nRespaldos incrementales de:\n%s\n\nSe guardan en la carpeta '%s/' del programa.\n",
-             ctx->ruta_actual, DIR_RESPALDOS);
+             "\nSe creará un respaldo de (%s):\n%s\n\nSe guarda en la carpeta '%s/' del programa.\n",
+             tipo_objetivo, ruta_objetivo, DIR_RESPALDOS);
 
     GtkWidget *etiqueta = gtk_label_new(mensaje);
     aplicar_clase(etiqueta, "texto");
@@ -284,11 +372,11 @@ static void on_btn_respaldos_clicked(GtkWidget *widget, gpointer datos) {
     gint respuesta = gtk_dialog_run(GTK_DIALOG(dialogo));
 
     if (respuesta == GTK_RESPONSE_APPLY) {
-        if (crear_respaldo_incremental(ctx->ruta_actual) == 0) {
+        if (crear_respaldo_incremental(ruta_objetivo) == 0) {
             mostrar_mensaje(widget, GTK_MESSAGE_INFO, "Respaldo creado correctamente.");
         } else {
             mostrar_mensaje(widget, GTK_MESSAGE_ERROR,
-                             "No se pudo crear el respaldo.\n¿Está instalado 'tar' en el sistema?");
+                             "No se pudo crear el respaldo.\nVerifique que la ruta exista y que 'tar' esté instalado.");
         }
     } else if (respuesta == GTK_RESPONSE_ACCEPT) {
         char lista[64][256];
@@ -296,12 +384,51 @@ static void on_btn_respaldos_clicked(GtkWidget *widget, gpointer datos) {
 
         if (total == 0) {
             mostrar_mensaje(widget, GTK_MESSAGE_WARNING, "No hay respaldos disponibles todavía.");
-        } else if (restaurar_version(lista[total - 1]) == 0) {
-            mostrar_mensaje(widget, GTK_MESSAGE_INFO,
-                             "Restauración completada en 'respaldos/restaurado'.");
-        } else {
-            mostrar_mensaje(widget, GTK_MESSAGE_ERROR, "No se pudo restaurar el respaldo.");
+            gtk_widget_destroy(dialogo);
+            return;
         }
+
+        /* Se pide la carpeta destino: restaurar_version() vaciará TODO su
+         * contenido antes de extraer, así que el usuario debe elegirla
+         * explícitamente (nunca se asume una carpeta por defecto). */
+        GtkWidget *selector_destino = gtk_file_chooser_dialog_new(
+            "Seleccione la carpeta donde restaurar (se vaciará su contenido)",
+            GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+            GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+            "Cancelar", GTK_RESPONSE_CANCEL,
+            "Elegir", GTK_RESPONSE_ACCEPT,
+            NULL
+        );
+
+        if (gtk_dialog_run(GTK_DIALOG(selector_destino)) == GTK_RESPONSE_ACCEPT) {
+            char *carpeta_destino = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(selector_destino));
+
+            GtkWidget *confirmacion = gtk_message_dialog_new(
+                GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+                GTK_DIALOG_MODAL,
+                GTK_MESSAGE_WARNING, GTK_BUTTONS_YES_NO,
+                "Esto BORRARÁ todo el contenido actual de:\n%s\n\n"
+                "y lo reemplazará con el respaldo más reciente.\n"
+                "¿Desea continuar?", carpeta_destino
+            );
+            gboolean confirmar = (gtk_dialog_run(GTK_DIALOG(confirmacion)) == GTK_RESPONSE_YES);
+            gtk_widget_destroy(confirmacion);
+
+            if (confirmar) {
+                if (restaurar_version(lista[total - 1], carpeta_destino) == 0) {
+                    mostrar_mensaje(widget, GTK_MESSAGE_INFO, "Restauración completada correctamente.");
+                    if (strcmp(carpeta_destino, ctx->ruta_actual) == 0) {
+                        refrescar_tabla(ctx); /* si restauramos sobre la carpeta visible, se refresca */
+                    }
+                } else {
+                    mostrar_mensaje(widget, GTK_MESSAGE_ERROR,
+                                     "No se pudo restaurar: la carpeta destino no es válida,\n"
+                                     "no se pudo vaciar (revise permisos), o falló la extracción.");
+                }
+            }
+            g_free(carpeta_destino);
+        }
+        gtk_widget_destroy(selector_destino);
     }
 
     gtk_widget_destroy(dialogo);
@@ -322,8 +449,18 @@ GtkWidget* crear_pantalla_archivos() {
      * sin necesidad de variables globales (separación de responsabilidades). */
     g_object_set_data_full(G_OBJECT(caja_principal), "contexto-archivos", ctx, contexto_archivos_destruir);
 
-    /* 1. BARRA SUPERIOR: navegación por ruta + búsqueda */
+    /* 1. BARRA SUPERIOR: navegación (atrás/adelante/ruta) + búsqueda */
     GtkWidget *caja_navegacion = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+
+    ctx->btn_atras = gtk_button_new_from_icon_name("go-previous-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_widget_set_tooltip_text(ctx->btn_atras, "Atrás");
+    gtk_widget_set_sensitive(ctx->btn_atras, FALSE); /* sin historial al inicio */
+    g_signal_connect(ctx->btn_atras, "clicked", G_CALLBACK(on_btn_atras_clicked), ctx);
+
+    ctx->btn_adelante = gtk_button_new_from_icon_name("go-next-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_widget_set_tooltip_text(ctx->btn_adelante, "Adelante");
+    gtk_widget_set_sensitive(ctx->btn_adelante, FALSE);
+    g_signal_connect(ctx->btn_adelante, "clicked", G_CALLBACK(on_btn_adelante_clicked), ctx);
 
     GtkWidget *label_ruta = gtk_label_new("Ruta:");
     aplicar_clase(label_ruta, "texto");
@@ -336,6 +473,8 @@ GtkWidget* crear_pantalla_archivos() {
     gtk_entry_set_placeholder_text(GTK_ENTRY(ctx->entrada_busqueda), "Buscar archivo...");
     g_signal_connect(ctx->entrada_busqueda, "search-changed", G_CALLBACK(on_busqueda_cambiada), ctx);
 
+    gtk_box_pack_start(GTK_BOX(caja_navegacion), ctx->btn_atras, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(caja_navegacion), ctx->btn_adelante, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja_navegacion), label_ruta, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja_navegacion), ctx->entrada_ruta, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(caja_navegacion), ctx->entrada_busqueda, FALSE, FALSE, 0);
@@ -365,9 +504,10 @@ GtkWidget* crear_pantalla_archivos() {
     gtk_box_pack_start(GTK_BOX(caja_botones), btn_mover, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja_botones), btn_eliminar, FALSE, FALSE, 0);
 
-    GtkWidget *separador = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
-    gtk_box_pack_start(GTK_BOX(caja_botones), separador, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(caja_botones), btn_respaldos, FALSE, FALSE, 0);
+    /* "Respaldos" se ancla al extremo derecho de la misma barra, sin necesidad
+     * de un separador "relleno" (ese widget intermedio era el que se veía como
+     * una barra gris sólida, ya que tomaba el estilo por defecto del tema). */
+    gtk_box_pack_end(GTK_BOX(caja_botones), btn_respaldos, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(caja_principal), caja_botones, FALSE, FALSE, 0);
 
