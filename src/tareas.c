@@ -11,8 +11,10 @@ enum {
     NUM_COLUMNAS
 };
 
-// FUNCIÓN 1: Listar Tabla
-static void cargar_procesos_en_tabla(GtkListStore *modelo) {
+// ==========================================
+// MÓDULO: Listar procesos
+// ==========================================
+static void listar_procesos(GtkListStore *modelo, const char *filtro) {
     struct dirent *entrada;
     DIR *directorio = opendir("/proc");
 
@@ -31,9 +33,16 @@ static void cargar_procesos_en_tabla(GtkListStore *modelo) {
             
             if (archivo != NULL) {
                 if (fgets(nombre, sizeof(nombre), archivo) != NULL) {
-                    nombre[strcspn(nombre, "\n")] = 0;
+                    nombre[strcspn(nombre, "\n")] = 0; 
                 }
                 fclose(archivo);
+            }
+
+            // Filtrado de búsqueda
+            if (filtro != NULL && strlen(filtro) > 0) {
+                if (strstr(nombre, filtro) == NULL && strstr(entrada->d_name, filtro) == NULL) {
+                    continue; 
+                }
             }
 
             GtkTreeIter iterador;
@@ -47,7 +56,19 @@ static void cargar_procesos_en_tabla(GtkListStore *modelo) {
     closedir(directorio);
 }
 
-// FUNCIÓN 2: Configurar estilo de tabla
+// ==========================================
+// MÓDULO: Buscar por nombre
+// ==========================================
+static void buscar_por_nombre(GtkEntry *buscador, gpointer user_data) {
+    GtkListStore *modelo = GTK_LIST_STORE(user_data);
+    const char *texto = gtk_entry_get_text(buscador);
+    
+    listar_procesos(modelo, texto);
+}
+
+// ==========================================
+// CONFIGURACIÓN VISUAL
+// ==========================================
 static void configurar_columnas(GtkTreeView *arbol) {
     GtkCellRenderer *renderizador = gtk_cell_renderer_text_new();
     
@@ -60,29 +81,32 @@ static void configurar_columnas(GtkTreeView *arbol) {
     gtk_tree_view_append_column(arbol, col_nombre);
 }
 
-// FUNCIÓN 3: Ensamblar la pantalla principal
+// ==========================================
+// ENSAMBLAJE PRINCIPAL
+// ==========================================
 GtkWidget* crear_pantalla_tareas() {
-    // 1. Contenedor principal estilo tarjeta
     GtkWidget *caja = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_style_context_add_class(gtk_widget_get_style_context(caja), "tarjeta");
 
-    // 2. Título
     GtkWidget *titulo = gtk_label_new("Administrador de Tareas");
     gtk_style_context_add_class(gtk_widget_get_style_context(titulo), "titulo");
     gtk_widget_set_halign(titulo, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(caja), titulo, FALSE, FALSE, 0);
 
-    // 3. Crear el modelo de datos
     GtkListStore *modelo = gtk_list_store_new(NUM_COLUMNAS, G_TYPE_STRING, G_TYPE_STRING);
 
-    // 4. Crear la tabla visual (TreeView) y enlazarla al modelo
+    // Caja de búsqueda (Input)
+    GtkWidget *buscador = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(buscador), "Buscar por nombre o PID...");
+    g_signal_connect(buscador, "changed", G_CALLBACK(buscar_por_nombre), modelo);
+    gtk_box_pack_start(GTK_BOX(caja), buscador, FALSE, FALSE, 0);
+
     GtkWidget *arbol = gtk_tree_view_new_with_model(GTK_TREE_MODEL(modelo));
-    g_object_unref(modelo); // Liberamos memoria, el árbol ya lo gestiona
+    g_object_unref(modelo); 
 
     configurar_columnas(GTK_TREE_VIEW(arbol));
-    cargar_procesos_en_tabla(modelo);
+    listar_procesos(modelo, NULL);
 
-    // 5. Agregar barra de desplazamiento
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_vexpand(scroll, TRUE);
     gtk_container_add(GTK_CONTAINER(scroll), arbol);
