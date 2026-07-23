@@ -25,6 +25,38 @@ typedef struct {
 } Proceso;
 
 // ==========================================
+// MÓDULO: Barra de Progreso (Estado del Sistema)
+// ==========================================
+static void actualizar_estado_sistema(GtkProgressBar *barra) {
+    FILE *archivo = fopen("/proc/meminfo", "r");
+    if (archivo == NULL) return;
+
+    long mem_total = 0, mem_libre = 0, mem_disponible = 0;
+    char linea[256];
+
+    while (fgets(linea, sizeof(linea), archivo)) {
+        if (sscanf(linea, "MemTotal: %ld kB", &mem_total) == 1) continue;
+        if (sscanf(linea, "MemAvailable: %ld kB", &mem_disponible) == 1) break;
+    }
+    fclose(archivo);
+
+    if (mem_total > 0) {
+        long mem_usada = mem_total - mem_disponible;
+        double porcentaje = (double)mem_usada / (double)mem_total;
+
+        char texto_barra[128];
+        snprintf(texto_barra, sizeof(texto_barra), "Uso de RAM Global: %.1f%% (%.2f GB / %.2f GB)",
+                 porcentaje * 100.0,
+                 (float)mem_usada / (1024.0 * 1024.0),
+                 (float)mem_total / (1024.0 * 1024.0));
+
+        gtk_progress_bar_set_fraction(barra, porcentaje);
+        gtk_progress_bar_set_text(barra, texto_barra);
+        gtk_progress_bar_set_show_text(barra, TRUE);
+    }
+}
+
+// ==========================================
 // MÓDULO: Árbol de procesos (Recursividad)
 // ==========================================
 static void construir_arbol_recursivo(GtkTreeStore *modelo, GtkTreeIter *padre, int ppid_buscado, Proceso *procesos, int total) {
@@ -53,7 +85,6 @@ static void construir_arbol_recursivo(GtkTreeStore *modelo, GtkTreeIter *padre, 
 // ==========================================
 // MÓDULO: Listar y Procesar Sistema
 // ==========================================
-// Ahora recibe un "booleano" para saber si debe dibujar el árbol o la lista plana
 static void listar_procesos(GtkTreeStore *modelo, const char *filtro, gboolean modo_arbol) {
     struct dirent *entrada;
     DIR *directorio = opendir("/proc");
@@ -130,11 +161,9 @@ static void listar_procesos(GtkTreeStore *modelo, const char *filtro, gboolean m
     }
     closedir(directorio);
 
-    // DIBUJO INTELIGENTE: Si el botón de árbol está activo Y no hay texto en el buscador, hacemos árbol
     gboolean usar_arbol = modo_arbol && (filtro == NULL || strlen(filtro) == 0);
 
     if (!usar_arbol) {
-        // MODO LISTA PLANA
         for (int i = 0; i < total_procesos; i++) {
             GtkTreeIter iter;
             gtk_tree_store_append(modelo, &iter, NULL); 
@@ -145,7 +174,6 @@ static void listar_procesos(GtkTreeStore *modelo, const char *filtro, gboolean m
                                COLUMNA_CPU, procesos[i].cpu, COLUMNA_MEMORIA, procesos[i].mem, -1);
         }
     } else {
-        // MODO ÁRBOL
         construir_arbol_recursivo(modelo, NULL, 0, procesos, total_procesos);
         for (int i = 0; i < total_procesos; i++) {
             if (!procesos[i].agregado_al_arbol) {
@@ -160,18 +188,18 @@ static void listar_procesos(GtkTreeStore *modelo, const char *filtro, gboolean m
 // ==========================================
 // MÓDULO: Actualizar Vista Unificada
 // ==========================================
-// Esta función lee el estado del buscador y del botón al mismo tiempo
 static void actualizar_vista(GtkWidget *widget, gpointer user_data) {
     GtkTreeStore *modelo = GTK_TREE_STORE(user_data);
     
-    // Recuperamos los widgets que guardamos en la memoria del modelo
     GtkWidget *buscador = g_object_get_data(G_OBJECT(modelo), "buscador");
     GtkWidget *btn_arbol = g_object_get_data(G_OBJECT(modelo), "btn_arbol");
+    GtkWidget *barra = g_object_get_data(G_OBJECT(modelo), "barra");
 
     const char *texto = gtk_entry_get_text(GTK_ENTRY(buscador));
     gboolean modo_arbol = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(btn_arbol));
 
     listar_procesos(modelo, texto, modo_arbol);
+    actualizar_estado_sistema(GTK_PROGRESS_BAR(barra));
 }
 
 // ==========================================
@@ -199,7 +227,6 @@ static void ejecutar_accion_proceso(GtkWidget *item, gpointer user_data) {
             kill(pid, SIGCONT);
         }
 
-        // Refrescar usando la función unificada
         actualizar_vista(NULL, modelo);
     }
 }
@@ -275,26 +302,27 @@ GtkWidget* crear_pantalla_tareas() {
     gtk_widget_set_halign(titulo, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(caja), titulo, FALSE, FALSE, 0);
 
+    // BARRA DE PROGRESO DE ESTADO DEL SISTEMA
+    GtkWidget *barra = gtk_progress_bar_new();
+    gtk_box_pack_start(GTK_BOX(caja), barra, FALSE, FALSE, 0);
+
     GtkTreeStore *modelo = gtk_tree_store_new(NUM_COLUMNAS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
 
-    // Caja horizontal para poner el buscador y el botón juntos
     GtkWidget *caja_controles = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     
     GtkWidget *buscador = gtk_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(buscador), "Buscar por nombre o PID...");
     
     GtkWidget *btn_arbol = gtk_toggle_button_new_with_label("Ver como Árbol");
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn_arbol), FALSE); // Inicia en modo plano
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn_arbol), FALSE);
 
-    // Guardamos los controles "dentro" del modelo para que la función actualizar_vista pueda leerlos
     g_object_set_data(G_OBJECT(modelo), "buscador", buscador);
     g_object_set_data(G_OBJECT(modelo), "btn_arbol", btn_arbol);
+    g_object_set_data(G_OBJECT(modelo), "barra", barra);
 
-    // Conectamos ambos a la misma función unificada
     g_signal_connect(buscador, "changed", G_CALLBACK(actualizar_vista), modelo);
     g_signal_connect(btn_arbol, "toggled", G_CALLBACK(actualizar_vista), modelo);
 
-    // Empaquetamos
     gtk_box_pack_start(GTK_BOX(caja_controles), buscador, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(caja_controles), btn_arbol, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja), caja_controles, FALSE, FALSE, 0);
@@ -305,7 +333,10 @@ GtkWidget* crear_pantalla_tareas() {
     g_signal_connect(arbol, "button-press-event", G_CALLBACK(mostrar_menu_contextual), NULL);
 
     configurar_columnas(GTK_TREE_VIEW(arbol));
-    listar_procesos(modelo, NULL, FALSE); // Carga inicial plana
+    
+    // Carga inicial
+    actualizar_estado_sistema(GTK_PROGRESS_BAR(barra));
+    listar_procesos(modelo, NULL, FALSE); 
 
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_vexpand(scroll, TRUE);
