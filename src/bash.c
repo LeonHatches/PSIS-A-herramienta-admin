@@ -147,8 +147,13 @@ GtkWidget *crear_pantalla_bash(void) {
     GtkWidget *abrir = gtk_button_new_with_label("Abrir .sh");
     GtkWidget *analizar = gtk_button_new_with_label("Analizar script");
     GtkWidget *paneles = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    
     GtkWidget *caja_codigo = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_style_context_add_class(gtk_widget_get_style_context(caja_codigo), "tarjeta");
+
     GtkWidget *caja_resultado = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_style_context_add_class(gtk_widget_get_style_context(caja_resultado), "tarjeta");
+
     GtkWidget *titulo_codigo = gtk_label_new("Código Bash");
     GtkWidget *titulo_resultado = gtk_label_new("Variables y ciclos detectados");
     GtkWidget *editor = crear_editor(&analizador->codigo);
@@ -173,10 +178,12 @@ GtkWidget *crear_pantalla_bash(void) {
     gtk_style_context_add_class(gtk_widget_get_style_context(titulo_resultado), "subtitulo");
     gtk_text_view_set_editable(GTK_TEXT_VIEW(gtk_bin_get_child(GTK_BIN(editor))), TRUE);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(gtk_bin_get_child(GTK_BIN(visor))), FALSE);
+    
     gtk_box_pack_start(GTK_BOX(caja_codigo), titulo_codigo, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja_codigo), editor, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(caja_resultado), titulo_resultado, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja_resultado), visor, TRUE, TRUE, 0);
+    
     gtk_paned_pack1(GTK_PANED(paneles), caja_codigo, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(paneles), caja_resultado, TRUE, FALSE);
     gtk_widget_set_vexpand(paneles, TRUE);
