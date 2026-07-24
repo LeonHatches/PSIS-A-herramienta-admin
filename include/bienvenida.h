@@ -3,6 +3,6 @@
 
 #include <gtk/gtk.h>
 
-GtkWidget* crear_pantalla_bienvenida();
+GtkWidget *crear_pantalla_bienvenida(GtkStack *stack);
 
 #endif

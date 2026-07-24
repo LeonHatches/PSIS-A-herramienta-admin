@@ -38,7 +38,7 @@ static void activar(GtkApplication *app, gpointer user_data) {
     gtk_box_pack_start(GTK_BOX(caja_principal), sidebar, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja_principal), stack, TRUE, TRUE, 0);
 
-    gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_bienvenida(), "bienvenida", "Inicio");
+    gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_bienvenida(GTK_STACK(stack)), "bienvenida", "Inicio");
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_archivos(), "archivos", "Archivos");
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_consola(), "consola", "Comandos Linux");
     gtk_stack_add_titled(GTK_STACK(stack), crear_pantalla_bash(), "bash", "Analizador Bash");

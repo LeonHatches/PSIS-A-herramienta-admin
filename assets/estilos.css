@@ -154,3 +154,90 @@ entry:focus {
     border: 1px solid #2383E2;
     background-color: #FFFFFF;
 }
+
+/* CENTRO DE ADMINISTRACION */
+box.dashboard-panel {
+    padding: 8px;
+}
+
+label.dashboard-titulo {
+    color: #37352F;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+label.dashboard-descripcion {
+    color: #787774;
+    font-size: 14px;
+}
+
+label.dashboard-seccion {
+    color: #37352F;
+    font-size: 17px;
+    font-weight: bold;
+    margin-top: 3px;
+}
+
+box.indicador-inicio {
+    background-color: #F7F7F5;
+    border: 1px solid #E9E9E7;
+    border-radius: 8px;
+    padding: 14px 16px;
+    color: #505050;
+}
+
+image.indicador-icono {
+    color: #505050;
+    background-color: #EBEBE9;
+    border-radius: 6px;
+    padding: 6px;
+}
+
+label.indicador-etiqueta {
+    color: #9B9A97;
+    font-size: 12px;
+}
+
+label.indicador-valor {
+    color: #37352F;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+button.tarjeta-modulo {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E5E2;
+    border-radius: 10px;
+    padding: 22px;
+    box-shadow: 0 2px 7px rgba(0, 0, 0, 0.035);
+}
+
+button.tarjeta-modulo:hover {
+    background-color: #F7F7F5;
+    border-color: #CFCFCA;
+    box-shadow: 0 4px 11px rgba(55, 53, 47, 0.07);
+}
+
+image.modulo-icono {
+    color: #37352F;
+    background-color: #EFEFED;
+    border-radius: 9px;
+    padding: 10px;
+}
+
+label.modulo-nombre {
+    color: #37352F;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+label.modulo-detalle {
+    color: #787774;
+    font-size: 14px;
+}
+
+label.modulo-accion {
+    color: #505050;
+    font-size: 14px;
+    font-weight: bold;
+}
